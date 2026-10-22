@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IP 批量查询 · 支持 IPv4 / IPv6</title>
+<style>
+  :root{
+    --bg:#f6f7f9;
+    --panel:#ffffff;
+    --line:#e3e6ec;
+    --line-strong:#d0d5dd;
+    --text:#1a1f2b;
+    --text-2:#5b6472;
+    --text-3:#8b94a3;
+    --accent:#2f6feb;
+    --accent-soft:#eaf1fe;
+    --ok:#1a7f4b;
+    --ok-soft:#e7f6ee;
+    --warn:#9a6700;
+    --warn-soft:#fff6e0;
+    --err:#c0392b;
+    --err-soft:#fdecea;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1240px;margin:0 auto;padding:26px 20px 60px}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  h1{font-size:20px;font-weight:650;margin:0;letter-spacing:.2px}
+  .sub{color:var(--text-2);font-size:13px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid transparent}
+  .tag.v4{background:var(--accent-soft);color:var(--accent);border-color:#cfe0fd}
+  .tag.v6{background:#f2ecfe;color:#6b3fd4;border-color:#e0d4fb}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:16px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .panel-h h2{font-size:14px;font-weight:650;margin:0;color:var(--text)}
+  .panel-h .note{font-size:12px;color:var(--text-3)}
+
+  textarea{
+    width:100%;min-height:132px;resize:vertical;padding:11px 12px;
+    font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--text);
+    background:#fbfcfd;border:1px solid var(--line-strong);border-radius:9px;outline:none;
+  }
+  textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,111,235,.12);background:#fff}
+
+  .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px}
+  .field{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2)}
+  select,input[type=number],input[type=text]{
+    font:inherit;font-size:13px;color:var(--text);background:#fff;
+    border:1px solid var(--line-strong);border-radius:7px;padding:5px 8px;outline:none;
+  }
+  select:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,111,235,.1)}
+  input[type=number]{width:62px}
+  input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;margin:0}
+
+  button{
+    font:inherit;font-size:13px;font-weight:600;padding:7px 15px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--line-strong);background:#fff;color:var(--text);transition:.15s;
+  }
+  button:hover:not(:disabled){border-color:#b9c0cc;background:#f9fafb}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover:not(:disabled){background:#255ed0;border-color:#255ed0}
+  button.ghost{border-color:transparent;color:var(--text-2);padding:6px 10px}
+  button.ghost:hover:not(:disabled){background:#f1f3f6;color:var(--text)}
+  .spacer{flex:1}
+
+  .hint{margin-top:10px;font-size:12px;color:var(--text-3);line-height:1.75}
+  .hint code{font-family:var(--mono);background:#f1f3f6;padding:1px 5px;border-radius:4px;color:var(--text-2)}
+
+  .progress{margin-top:16px;padding-bottom:4px;display:none}
+  .progress.on{display:block}
+  .bar{height:8px;background:#e8ebf1;border-radius:99px;overflow:hidden}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2f6feb,#5a8df5);border-radius:99px;transition:width .2s}
+  .pmeta{display:flex;gap:16px;flex-wrap:wrap;margin-top:9px;font-size:12px;color:var(--text-2);font-variant-numeric:tabular-nums}
+
+  .stats{display:flex;gap:8px;flex-wrap:wrap}
+  .stat{display:flex;align-items:baseline;gap:5px;background:#f7f8fa;border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-size:12px;color:var(--text-2)}
+  .stat b{font-size:13px;color:var(--text);font-variant-numeric:tabular-nums}
+  .stat.ok b{color:var(--ok)} .stat.err b{color:var(--err)}
+
+  .tablewrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:10px;margin-top:12px}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px}
+  thead th{
+    position:sticky;top:0;z-index:2;background:#f7f8fa;text-align:left;font-weight:600;color:var(--text-2);
+    font-size:12px;padding:9px 10px;border-bottom:1px solid var(--line-strong);white-space:nowrap;cursor:pointer;user-select:none;
+  }
+  thead th:hover{color:var(--text)}
+  thead th .arr{opacity:.4;font-size:11px;margin-left:4px;letter-spacing:-1px}
+  thead th.sorted .arr{opacity:1;color:var(--accent)}
+  tbody td{padding:8px 10px;border-bottom:1px solid #eef0f4;vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:#fafbfd}
+  td.ip{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+  td.ip .net{display:block;font-size:11px;color:var(--text-3);font-family:var(--mono)}
+  td.num{color:var(--text-3);font-variant-numeric:tabular-nums;text-align:right;width:44px}
+  td.isp{color:var(--text-2);min-width:170px;max-width:260px}
+  td.full{color:var(--text-2);min-width:250px}
+  td.nw{white-space:nowrap}
+  td.src{color:var(--text-3);font-size:12px;white-space:nowrap}
+  .st{font-size:12px;white-space:nowrap}
+  .st.ok{color:var(--ok)} .st.err{color:var(--err)} .st.wait{color:var(--text-3)} .st.cache{color:var(--warn)}
+  .empty{padding:34px 10px;text-align:center;color:var(--text-3);font-size:13px}
+  .more{padding:9px;text-align:center;color:var(--text-3);font-size:12px;background:#fbfcfd}
+
+  footer{margin-top:26px;font-size:12px;color:var(--text-3);line-height:1.85}
+  footer a{color:var(--accent);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  .links{margin-bottom:14px}
+  .links-h{font-size:12px;font-weight:650;color:var(--text-2);letter-spacing:.5px;margin-bottom:8px}
+  .link-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  .link-card{
+    display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:11px 14px;text-decoration:none !important;transition:.15s;
+  }
+  .link-card:hover{border-color:#c3d5f7;box-shadow:0 2px 8px rgba(47,111,235,.08);transform:translateY(-1px)}
+  .link-card b{display:block;font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px}
+  .link-card span{display:block;font-size:12px;color:var(--text-3);line-height:1.6}
+  .thanks{margin:0 0 6px;color:var(--text-2);background:var(--panel);border:1px solid var(--line);border-left:3px solid #cfe0fd;border-radius:8px;padding:10px 14px}
+  .disclaimer{margin:10px 0 0;color:var(--text-3);font-size:12px}
+  @media (max-width:720px){
+    .wrap{padding:16px 12px 40px}
+    h1{font-size:17px}
+    .toolbar{gap:10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>IP 批量查询</h1>
+    <span class="tag v4">IPv4</span>
+    <span class="tag v6">IPv6</span>
+    <span class="sub">纯前端 · 并发批量 · 结果可导出</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>① 粘贴 IP 列表</h2>
+      <span class="note">每行一个；也支持逗号 / 空格 / 分号分隔，可带端口、可写 CIDR</span>
+    </div>
+    <textarea id="input" spellcheck="false" placeholder="1.1.1.1
+8.8.8.8:53
+114.114.114.0/30
+2408:8000::1
+240e:0:8000::/126
+[2001:4860:4860::8888]:443"></textarea>
+
+    <div class="toolbar">
+      <label class="field">数据源
+        <select id="source">
+          <option value="auto" selected>自动（纯真 → ipwho.is）</option>
+          <option value="zxinc">纯真 IP 库（中文最准，日限 ~100 次）</option>
+          <option value="whois">ipwho.is（无限流，国外库）</option>
+          <option value="ipsb">ip.sb（含 ASN/运营商）</option>
+          <option value="ipinfo">ipinfo.io（可填 token）</option>
+        </select>
+      </label>
+      <label class="field" id="tokenWrap" style="display:none">Token
+        <input type="text" id="token" placeholder="ipinfo token（可选）" style="width:170px">
+      </label>
+      <label class="field">并发
+        <input type="number" id="conc" value="6" min="1" max="20">
+      </label>
+      <label class="field"><input type="checkbox" id="useCache" checked> 用缓存</label>
+      <label class="field"><input type="checkbox" id="expandCidr" checked> 展开 CIDR</label>
+      <span class="spacer"></span>
+      <button class="primary" id="run">开始查询</button>
+      <button id="stop" disabled>停止</button>
+      <button class="ghost" id="myip">查我的 IP</button>
+      <button class="ghost" id="demo">示例</button>
+      <button class="ghost" id="clear">清空</button>
+    </div>
+
+    <div class="progress" id="progress">
+      <div class="bar"><i id="barIn"></i></div>
+      <div class="pmeta">
+        <span id="pTxt">等待开始</span>
+        <span id="pOk"></span>
+        <span id="pErr"></span>
+        <span id="pEta"></span>
+      </div>
+      <div id="warn" style="display:none;margin-top:8px;font-size:12px;color:var(--warn);background:var(--warn-soft);border:1px solid #f0e0b8;border-radius:7px;padding:6px 10px"></div>
+    </div>
+
+    <div class="hint">
+      快捷键 <code>Ctrl/⌘ + Enter</code> 开始查询 · 相同 IP 自动去重 · 结果按 IP 缓存在本地（7 天），重复查询不消耗接口额度
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>② 查询结果</h2>
+      <div class="stats">
+        <span class="stat">总数 <b id="sTotal">0</b></span>
+        <span class="stat ok">成功 <b id="sOk">0</b></span>
+        <span class="stat err">失败 <b id="sErr">0</b></span>
+        <span class="stat">耗时 <b id="sTime">—</b></span>
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:0">
+      <input type="text" id="filter" placeholder="筛选：IP / 地区 / 运营商" style="width:240px">
+      <label class="field">版本
+        <select id="fVer"><option value="">全部</option><option value="IPv4">IPv4</option><option value="IPv6">IPv6</option></select>
+      </label>
+      <label class="field">状态
+        <select id="fSt"><option value="">全部</option><option value="ok">成功</option><option value="fail">失败</option></select>
+      </label>
+      <span class="spacer"></span>
+      <button id="csv">导出 CSV</button>
+      <button id="json">导出 JSON</button>
+      <button class="ghost" id="copy">复制表格</button>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-k="id" style="width:44px">#<span class="arr">↑↓</span></th>
+            <th data-k="ip">IP 地址<span class="arr">↑↓</span></th>
+            <th data-k="ver" style="width:66px">版本<span class="arr">↑↓</span></th>
+            <th data-k="country">国家/地区<span class="arr">↑↓</span></th>
+            <th data-k="region">省份<span class="arr">↑↓</span></th>
+            <th data-k="city">城市<span class="arr">↑↓</span></th>
+            <th data-k="isp">运营商 / 单位<span class="arr">↑↓</span></th>
+            <th data-k="full">归属地全文<span class="arr">↑↓</span></th>
+            <th data-k="source" style="width:96px">数据源<span class="arr">↑↓</span></th>
+            <th data-k="status" style="width:92px">状态<span class="arr">↑↓</span></th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="10" class="empty">还没有结果，粘贴 IP 后点「开始查询」</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <div class="links">
+      <div class="links-h">友情链接</div>
+      <div class="link-grid">
+        <a class="link-card" href="https://ip.zxinc.org/" target="_blank" rel="noopener noreferrer">
+          <b>纯真 IP 库社区版 · ZXinc</b>
+          <span>IPv4 / IPv6 归属地查询，本站主要数据来源</span>
+        </a>
+        <a class="link-card" href="https://lwebapp.com/zh/ip-batch" target="_blank" rel="noopener noreferrer">
+          <b>lwebapp · IP 地址批量查询</b>
+          <span>离线批量查询工具，本页面的灵感来源</span>
+        </a>
+      </div>
+    </div>
+
+    <p class="thanks">
+      感谢 <a href="https://ip.zxinc.org/" target="_blank" rel="noopener noreferrer">纯真 IP 库社区版（ip.zxinc.org）</a>
+      多年免费开放查询接口与 IPv6 地址库，也感谢
+      <a href="https://lwebapp.com/zh/ip-batch" target="_blank" rel="noopener noreferrer">lwebapp</a>
+      提供的离线批量查询工具带来的启发。这两个社区工具无偿开放，本页面才得以存在。
+    </p>
+
+    <p class="disclaimer">
+      纯真免费接口官方公告约 100 次/天，大批量请切换到 ipwho.is / ip.sb，或自建离线库（ipv6wry.db + qqwry.dat）本地查询。
+    </p>
+  </footer>
+</div>
+
+<script>
+/* ==================== CORE START（纯函数，可单独测试） ==================== */
+function stripPort(t){
+  t = String(t).trim();
+  var m = t.match(/^\[([0-9a-fA-F:.]+)\](?::\d{1,5})?$/);
+  if(m) return m[1];
+  m = t.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$/);
+  if(m) return m[1];
+  return t;
+}
+
+function parseIPv4(s){
+  var p = String(s).split('.');
+  if(p.length !== 4) return null;
+  var n = 0n;
+  for(var i=0;i<4;i++){
+    if(!/^\d{1,3}$/.test(p[i])) return null;
+    var v = parseInt(p[i],10);
+    if(v > 255) return null;
+    n = (n << 8n) | BigInt(v);
+  }
+  return n;
+}
+
+function isIPv6(s){
+  if(!s || s.indexOf(':') < 0) return false;
+  if(/[^0-9a-fA-F:.]/.test(s)) return false;
+  try{ new URL('http://[' + s + ']/'); return true; }catch(e){ return false; }
+}
+
+function normIPv6(s){
+  try{ return new URL('http://[' + s + ']/').hostname.replace(/^\[|\]$/g,'').toLowerCase(); }
+  catch(e){ return String(s).toLowerCase(); }
+}
+
+function ipv6ToBigInt(str){
+  var s = String(str).trim().toLowerCase();
+  if(!isIPv6(s)) return null;
+  var dotted = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if(dotted){
+    var v4 = parseIPv4(dotted[2]);
+    if(v4 === null) return null;
+    var hi = Number(v4 >> 16n) & 0xffff;
+    var lo = Number(v4 & 0xffffn);
+    s = dotted[1] + hi.toString(16) + ':' + lo.toString(16);
+  }
+  var halves = s.split('::');
+  if(halves.length > 2) return null;
+  var head = halves[0] ? halves[0].split(':') : [];
+  var tail = halves.length > 1 ? (halves[1] ? halves[1].split(':') : []) : null;
+  var parts;
+  if(tail === null){
+    parts = head;
+  }else{
+    var fill = 8 - head.length - tail.length;
+    if(fill < 0) return null;
+    parts = head.concat(new Array(fill).fill('0'), tail);
+  }
+  if(parts.length !== 8) return null;
+  var n = 0n;
+  for(var i=0;i<8;i++){
+    if(!/^[0-9a-f]{1,4}$/.test(parts[i])) return null;
+    n = (n << 16n) | BigInt(parseInt(parts[i],16));
+  }
+  return n;
+}
+
+function bigIntToIPv6(n){
+  var g = [];
+  for(var i=7;i>=0;i--) g.push(Number((n >> BigInt(i*16)) & 0xffffn));
+  var bestS = -1, bestL = 0, curS = -1, curL = 0;
+  for(var j=0;j<8;j++){
+    if(g[j] === 0){
+      if(curS < 0){ curS = j; curL = 0; }
+      curL++;
+      if(curL > bestL){ bestL = curL; bestS = curS; }
+    }else{ curS = -1; curL = 0; }
+  }
+  var hex = g.map(function(x){ return x.toString(16); });
+  if(bestL > 1){
+    var left = hex.slice(0, bestS).join(':');
+    var right = hex.slice(bestS + bestL).join(':');
+    return (left + '::' + right).replace(/^::$/,'::');
+  }
+  return hex.join(':');
+}
+
+/* 解析一行/一段输入，返回 {valid:[{ip,ver}], invalid:[{raw,reason}]} */
+function parseList(text, opts){
+  opts = opts || {};
+  var expand = opts.expandCidr !== false;
+  var cap = opts.cap || 4096;
+  var out = { valid: [], invalid: [] };
+  var seen = Object.create(null);
+  var tokens = String(text).split(/[\s,;，；、]+/);
+
+  function push(ip, ver){
+    if(seen[ip]) return;
+    seen[ip] = 1;
+    out.valid.push({ ip: ip, ver: ver });
+  }
+
+  for(var i=0;i<tokens.length;i++){
+    var raw = tokens[i].trim();
+    if(!raw || raw.charAt(0) === '#') continue;
+
+    if(raw.indexOf('/') >= 0){
+      if(!expand){ out.invalid.push({ raw: raw, reason: 'CIDR 已关闭展开' }); continue; }
+      var r = expandCidr(raw, cap);
+      if(r.error){ out.invalid.push({ raw: raw, reason: r.error }); continue; }
+      for(var k=0;k<r.list.length;k++) push(r.list[k], r.ver);
+      continue;
+    }
+
+    var t = stripPort(raw);
+    if(parseIPv4(t) !== null){ push(t, 'IPv4'); continue; }
+    if(isIPv6(t)){ push(normIPv6(t), 'IPv6'); continue; }
+    out.invalid.push({ raw: raw, reason: '不是合法 IP' });
+  }
+  return out;
+}
+
+function expandCidr(tok, cap){
+  var parts = tok.split('/');
+  if(parts.length !== 2) return { error: 'CIDR 格式错误' };
+  var base = stripPort(parts[0]);
+  var prefix = parts[1];
+  if(!/^\d{1,3}$/.test(prefix)) return { error: 'CIDR 前缀错误' };
+  prefix = parseInt(prefix, 10);
+
+  var v4 = parseIPv4(base);
+  if(v4 !== null){
+    if(prefix > 32) return { error: 'IPv4 前缀需 ≤32' };
+    var bits4 = 32 - prefix;
+    if(bits4 > 12) return { error: '网段过大（>' + cap + '），请拆分' };
+    var size4 = Math.pow(2, bits4);
+    var mask4 = ((1n << 32n) - 1n) ^ ((1n << BigInt(bits4)) - 1n);
+    var start4 = v4 & mask4;
+    var list4 = [];
+    for(var a=0;a<size4;a++){
+      var n = start4 + BigInt(a);
+      list4.push([Number((n >> 24n) & 255n), Number((n >> 16n) & 255n), Number((n >> 8n) & 255n), Number(n & 255n)].join('.'));
+    }
+    return { list: list4, ver: 'IPv4' };
+  }
+
+  if(isIPv6(base)){
+    if(prefix > 128) return { error: 'IPv6 前缀需 ≤128' };
+    var bits6 = 128 - prefix;
+    if(bits6 > 12) return { error: 'IPv6 网段过大，仅支持 /116 及更细' };
+    var v6 = ipv6ToBigInt(base);
+    if(v6 === null) return { error: 'IPv6 解析失败' };
+    var mask6 = ((1n << 128n) - 1n) ^ ((1n << BigInt(bits6)) - 1n);
+    var start6 = v6 & mask6;
+    var size6 = Math.pow(2, bits6);
+    var list6 = [];
+    for(var b=0;b<size6;b++) list6.push(bigIntToIPv6(start6 + BigInt(b)));
+    return { list: list6, ver: 'IPv6' };
+  }
+  return { error: 'CIDR 基址不是合法 IP' };
+}
+
+/* 各数据源 → 统一结构 */
+function pickFirst(){
+  for(var i=0;i<arguments.length;i++){ if(arguments[i]) return arguments[i]; }
+  return '';
+}
+
+function cleanWs(s){
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+}
+
+function normalizeZxinc(j){
+  if(!j || j.code !== 0) throw new Error('纯真返回 code=' + (j && j.code));
+  var d = j.data || {};
+  // 纯真被限流/无收录时会返回空壳，抛错以便自动降级到下一个数据源
+  if(!d.location && !d.country && !d.local) throw new Error('纯真无数据（可能触发限流）');
+  // 纯真的 country 字段用 “–” 分段，但 IPv6 记录里常混入制表符/多空格，统一成 “–” 再拆
+  var raw = String(d.country || '')
+    .replace(/\t+/g, '–')
+    .replace(/\s{2,}/g, '–')
+    .replace(/[–—]{2,}/g, '–')
+    .replace(/^[–—\s]+|[–—\s]+$/g, '');
+  var seg = raw.split(/[–—]/).map(cleanWs).filter(Boolean);
+  return {
+    country: seg[0] || '',
+    region: seg[1] || '',
+    city: seg[2] || '',
+    isp: cleanWs(d.local),
+    full: cleanWs(d.location)
+  };
+}
+
+function normalizeWhois(j){
+  if(!j || j.success === false) throw new Error((j && j.message) || 'ipwho.is 查询失败');
+  var c = j.connection || {};
+  return {
+    country: j.country || '',
+    region: j.region || '',
+    city: j.city || '',
+    isp: pickFirst(c.isp, c.org, c.domain),
+    full: [j.country, j.region, j.city, pickFirst(c.isp, c.org)].filter(Boolean).join(' ')
+  };
+}
+
+function normalizeIpsb(j){
+  if(!j || !j.ip) throw new Error('ip.sb 无数据');
+  return {
+    country: j.country || '',
+    region: j.region || '',
+    city: j.city || '',
+    isp: pickFirst(j.isp, j.organization, j.asn_organization),
+    full: [j.country, j.region, j.city, pickFirst(j.isp, j.organization, j.asn_organization)].filter(Boolean).join(' ')
+  };
+}
+
+function normalizeIpinfo(j){
+  if(!j || j.bogon || (!j.country && !j.org && !j.city)) throw new Error('ipinfo 无数据');
+  return {
+    country: j.country || '',
+    region: j.region || '',
+    city: j.city || '',
+    isp: j.org || '',
+    full: [j.country, j.region, j.city, j.org].filter(Boolean).join(' ')
+  };
+}
+
+function netOf(ip, ver){
+  if(ver === 'IPv4'){
+    var n = parseIPv4(ip);
+    if(n === null) return '';
+    var s = Number((n >> 8n) & 0xffffffn);
+    return [Number((n >> 24n) & 255n), Number((n >> 16n) & 255n), Number((n >> 8n) & 255n), 0].join('.') + '/24';
+  }
+  var v6 = ipv6ToBigInt(ip);
+  if(v6 === null) return '';
+  return bigIntToIPv6(v6 & 0xffffffffffffffff0000000000000000n) + '/64';
+}
+
+function toCSV(rows){
+  var head = ['序号','IP','版本','国家/地区','省份','城市','运营商/单位','归属地全文','数据源','状态'];
+  var lines = [head.join(',')];
+  rows.forEach(function(r, i){
+    var cells = [String(i+1), r.ip, r.ver, r.country, r.region, r.city, r.isp, r.full, r.source, r.status === 'ok' ? '成功' : '失败'];
+    lines.push(cells.map(function(c){
+      var s = String(c == null ? '' : c);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+    }).join(','));
+  });
+  return lines.join('\r\n');
+}
+/* ==================== CORE END ==================== */
+</script>
+
+<script>
+(function(){
+  var $ = function(s){ return document.querySelector(s); };
+  var inputEl = $('#input'), tbody = $('#tbody');
+  var state = { rows: [], running: false, stop: false, done: 0, total: 0, t0: 0, sortKey: 'id', sortAsc: true };
+  var CACHE_KEY = 'ipbatch.cache.v1';
+  var TTL = 7 * 24 * 3600 * 1000;
+  var cache = loadCache();
+  var renderTimer = null;
+
+  /* ---------- 缓存 ---------- */
+  function loadCache(){
+    try{
+      var raw = localStorage.getItem(CACHE_KEY);
+      if(!raw) return {};
+      var o = JSON.parse(raw);
+      return (o && typeof o === 'object') ? o : {};
+    }catch(e){ return {}; }
+  }
+  function saveCache(){
+    try{
+      var keys = Object.keys(cache);
+      if(keys.length > 8000){
+        keys.sort(function(a,b){ return (cache[a].t||0) - (cache[b].t||0); });
+        keys.slice(0, keys.length - 8000).forEach(function(k){ delete cache[k]; });
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    }catch(e){}
+  }
+
+  /* ---------- 网络 ---------- */
+  function fetchWithTimeout(url, ms){
+    var ctl = new AbortController();
+    var timer = setTimeout(function(){ ctl.abort(); }, ms || 12000);
+    return fetch(url, { signal: ctl.signal, cache: 'no-store' })
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        return r;
+      })
+      .finally(function(){ clearTimeout(timer); });
+  }
+
+  function qZxinc(ip){
+    return fetchWithTimeout('https://ip.zxinc.org/api.php?type=json&ip=' + encodeURIComponent(ip))
+      .then(function(r){ return r.json(); })
+      .then(normalizeZxinc);
+  }
+  function qWhois(ip){
+    return fetchWithTimeout('https://ipwho.is/' + encodeURIComponent(ip))
+      .then(function(r){ return r.json(); })
+      .then(normalizeWhois);
+  }
+  function qIpsb(ip){
+    return fetchWithTimeout('https://api.ip.sb/geoip/' + encodeURIComponent(ip))
+      .then(function(r){ return r.json(); })
+      .then(normalizeIpsb);
+  }
+  function qIpinfo(ip){
+    var tk = ($('#token').value || '').trim();
+    var url = 'https://ipinfo.io/' + encodeURIComponent(ip) + '/json' + (tk ? '?token=' + encodeURIComponent(tk) : '');
+    return fetchWithTimeout(url).then(function(r){ return r.json(); }).then(normalizeIpinfo);
+  }
+
+  function queryOne(ip, mode){
+    var chain;
+    if(mode === 'zxinc') chain = [['纯真', qZxinc]];
+    else if(mode === 'whois') chain = [['ipwho.is', qWhois]];
+    else if(mode === 'ipsb') chain = [['ip.sb', qIpsb]];
+    else if(mode === 'ipinfo') chain = [['ipinfo', qIpinfo]];
+    else chain = [['纯真', qZxinc], ['ipwho.is', qWhois]];
+
+    var i = 0;
+    function next(){
+      if(i >= chain.length) return Promise.reject(new Error('所有数据源均失败'));
+      var item = chain[i++];
+      return item[1](ip).then(function(res){
+        res.source = item[0];
+        return res;
+      }).catch(function(err){
+        if(i >= chain.length) throw err;
+        return next();
+      });
+    }
+    return next();
+  }
+
+  /* ---------- 渲染 ---------- */
+  function scheduleRender(){
+    if(renderTimer) return;
+    renderTimer = setTimeout(function(){
+      renderTimer = null;
+      render();
+    }, 160);
+  }
+
+  function currentRows(){
+    var kw = ($('#filter').value || '').trim().toLowerCase();
+    var fv = $('#fVer').value;
+    var fs = $('#fSt').value;
+    var rows = state.rows.filter(function(r){
+      if(fv && r.ver !== fv) return false;
+      if(fs === 'ok' && r.status !== 'ok') return false;
+      if(fs === 'fail' && r.status !== 'fail') return false;
+      if(kw){
+        var hay = (r.ip + ' ' + r.country + ' ' + r.region + ' ' + r.city + ' ' + r.isp + ' ' + r.full).toLowerCase();
+        if(hay.indexOf(kw) < 0) return false;
+      }
+      return true;
+    });
+    var k = state.sortKey, asc = state.sortAsc ? 1 : -1;
+    rows.sort(function(a, b){
+      var va = a[k], vb = b[k];
+      if(k === 'id' || k === 'ms') return (va - vb) * asc;
+      va = String(va == null ? '' : va); vb = String(vb == null ? '' : vb);
+      return va.localeCompare(vb, 'zh-CN') * asc;
+    });
+    return rows;
+  }
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+      return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c];
+    });
+  }
+
+  function render(){
+    var rows = currentRows();
+    var LIMIT = 3000;
+    var html = '';
+    rows.slice(0, LIMIT).forEach(function(r, i){
+      var st = r.status === 'ok'
+        ? (r.cached ? '<span class="st cache">缓存命中</span>' : '<span class="st ok">成功</span>')
+        : r.status === 'fail'
+          ? '<span class="st err" title="' + esc(r.err || '') + '">' + (r.invalid ? '无效' : '失败') + '</span>'
+          : '<span class="st wait">查询中…</span>';
+      html += '<tr>'
+        + '<td class="num">' + (i + 1) + '</td>'
+        + '<td class="ip">' + esc(r.ip) + '<span class="net">' + esc(netOf(r.ip, r.ver)) + '</span></td>'
+        + '<td><span class="tag ' + (r.ver === 'IPv4' ? 'v4' : 'v6') + '">' + r.ver + '</span></td>'
+        + '<td class="nw">' + esc(r.country) + '</td>'
+        + '<td class="nw">' + esc(r.region) + '</td>'
+        + '<td class="nw">' + esc(r.city) + '</td>'
+        + '<td class="isp">' + esc(r.isp) + '</td>'
+        + '<td class="full">' + esc(r.full) + '</td>'
+        + '<td class="src">' + esc(r.source) + '</td>'
+        + '<td>' + st + '</td>'
+        + '</tr>';
+    });
+    if(!rows.length){
+      html = '<tr><td colspan="10" class="empty">' + (state.rows.length ? '没有符合筛选条件的结果' : '还没有结果，粘贴 IP 后点「开始查询」') + '</td></tr>';
+    }else if(rows.length > LIMIT){
+      html += '<tr><td colspan="10" class="more">仅显示前 ' + LIMIT + ' 条，共 ' + rows.length + ' 条；导出不受限制</td></tr>';
+    }
+    tbody.innerHTML = html;
+    updateStats();
+  }
+
+  function updateStats(){
+    var ok = 0, err = 0;
+    state.rows.forEach(function(r){
+      if(r.status === 'ok') ok++;
+      else if(r.status === 'fail') err++;
+    });
+    $('#sTotal').textContent = state.rows.length;
+    $('#sOk').textContent = ok;
+    $('#sErr').textContent = err;
+    if(state.t0){
+      var sec = (Date.now() - state.t0) / 1000;
+      $('#sTime').textContent = sec < 60 ? sec.toFixed(1) + 's' : Math.floor(sec / 60) + 'm' + Math.round(sec % 60) + 's';
+    }
+  }
+
+  function updateProgress(){
+    var pct = state.total ? Math.round(state.done / state.total * 100) : 0;
+    $('#barIn').style.width = pct + '%';
+    $('#pTxt').textContent = '进度 ' + state.done + ' / ' + state.total + '（' + pct + '%）';
+    if(state.running && state.done < state.total && state.done > 0){
+      var per = (Date.now() - state.t0) / state.done;
+      var left = Math.round(per * (state.total - state.done) / 1000);
+      $('#pEta').textContent = '预计剩余 ' + (left <= 0 ? '不到 1' : left) + ' 秒';
+    }else if(!state.running && state.total){
+      $('#pEta').textContent = '';
+    }
+  }
+
+  /* ---------- 主流程 ---------- */
+  async function run(){
+    if(state.running) return;
+    var parsed = parseList(inputEl.value, { expandCidr: $('#expandCidr').checked, cap: 4096 });
+    if(!parsed.valid.length && !parsed.invalid.length){ return; }
+
+    state.rows = parsed.valid.map(function(o, i){
+      return { id: i + 1, ip: o.ip, ver: o.ver, country: '', region: '', city: '', isp: '', full: '', source: '', status: 'wait', ms: 0, cached: false, err: '' };
+    });
+    // 非法项也进表，标红提示
+    parsed.invalid.forEach(function(b, i){
+      state.rows.push({ id: state.rows.length + 1, ip: b.raw, ver: b.raw.indexOf(':') >= 0 ? 'IPv6' : 'IPv4', country: '', region: '', city: '', isp: '', full: '', source: '—', status: 'fail', ms: 0, cached: false, invalid: true, err: b.reason });
+    });
+
+    if(!state.rows.length) return;
+    state.running = true; state.stop = false; state.done = 0;
+    state.total = state.rows.length; state.t0 = Date.now();
+    $('#run').disabled = true; $('#stop').disabled = false;
+    $('#progress').classList.add('on');
+    $('#sTime').textContent = '—';
+    render(); updateProgress();
+
+    var mode = $('#source').value;
+    var conc = Math.max(1, Math.min(20, parseInt($('#conc').value, 10) || 6));
+    var useCache = $('#useCache').checked;
+    var queue = state.rows.filter(function(r){ return r.status === 'wait'; });
+    var cursor = 0;
+
+    // 纯真免费接口日限 ~100 次，量大会被限流，提前提示
+    var warnEl = $('#warn');
+    warnEl.style.display = 'none';
+    if((mode === 'zxinc' || mode === 'auto') && queue.length > 90){
+      warnEl.style.display = 'block';
+      warnEl.textContent = '本次 ' + queue.length + ' 条。纯真免费接口官方公告约 100 次/天（实测可能更多，但不保证）。'
+        + (mode === 'auto'
+            ? '超出后会自动降级到 ipwho.is（国外库，中文精度略低）。'
+            : '超出部分可能失败，建议改用「自动」或 ipwho.is，或分批查询。');
+    }
+
+    async function worker(){
+      while(true){
+        if(state.stop) return;
+        var idx = cursor++;
+        if(idx >= queue.length) return;
+        var row = queue[idx];
+        var hit = useCache ? cache[row.ip] : null;
+        if(hit && (Date.now() - (hit.t || 0)) < TTL && hit.d){
+          Object.assign(row, hit.d);
+          row.source = hit.d.source || '';
+          row.status = 'ok'; row.cached = true;
+          state.done++; updateProgress(); scheduleRender();
+          continue;
+        }
+        var t1 = Date.now();
+        try{
+          var res = await queryOne(row.ip, mode);
+          row.country = res.country || '';
+          row.region = res.region || '';
+          row.city = res.city || '';
+          row.isp = res.isp || '';
+          row.full = res.full || '';
+          row.source = res.source || '';
+          row.status = 'ok';
+          cache[row.ip] = { t: Date.now(), d: { country: row.country, region: row.region, city: row.city, isp: row.isp, full: row.full, source: row.source } };
+        }catch(e){
+          row.status = 'fail';
+          row.err = (e && e.name === 'AbortError') ? '请求超时' : String((e && e.message) || e);
+        }
+        row.ms = Date.now() - t1;
+        state.done++;
+        updateProgress(); scheduleRender();
+      }
+    }
+
+    var n = Math.min(conc, queue.length);
+    var tasks = [];
+    for(var i=0;i<n;i++) tasks.push(worker());
+    await Promise.all(tasks);
+
+    state.running = false;
+    $('#run').disabled = false; $('#stop').disabled = true;
+    saveCache();
+    updateStats(); updateProgress(); render();
+    if(state.stop) $('#pTxt').textContent = '已停止（' + state.done + ' / ' + state.total + '）';
+  }
+
+  /* ---------- 导出 ---------- */
+  function download(name, content, type){
+    var blob = new Blob([content], { type: type || 'text/plain;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function stamp(){
+    var d = new Date(), p = function(x){ return String(x).padStart(2,'0'); };
+    return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+  }
+
+  /* ---------- 事件 ---------- */
+  $('#run').addEventListener('click', run);
+  $('#stop').addEventListener('click', function(){ state.stop = true; });
+  $('#clear').addEventListener('click', function(){
+    inputEl.value = ''; state.rows = []; state.t0 = 0;
+    $('#sTime').textContent = '—'; render();
+  });
+  $('#demo').addEventListener('click', function(){
+    inputEl.value = [
+      '1.1.1.1',
+      '8.8.8.8',
+      '114.114.114.114',
+      '223.5.5.5',
+      '220.181.38.148',
+      '2408:8000::1',
+      '240e:0:8000::1',
+      '2001:4860:4860::8888',
+      '2606:4700:4700::1111',
+      '2408:8000::/126'
+    ].join('\n');
+  });
+  $('#myip').addEventListener('click', async function(){
+    try{
+      var ip = '';
+      try{
+        var r = await fetchWithTimeout('https://ip.zxinc.org/getip', 8000);
+        ip = (await r.text()).trim();
+      }catch(e){}
+      if(!ip){
+        var j = await fetchWithTimeout('https://ipwho.is/', 8000).then(function(r){ return r.json(); });
+        ip = j.ip;
+      }
+      inputEl.value = ip;
+      run();
+    }catch(e){ alert('获取本机 IP 失败：' + e.message); }
+  });
+  $('#source').addEventListener('change', function(){
+    $('#tokenWrap').style.display = this.value === 'ipinfo' ? 'inline-flex' : 'none';
+  });
+  $('#filter').addEventListener('input', scheduleRender);
+  $('#fVer').addEventListener('change', scheduleRender);
+  $('#fSt').addEventListener('change', scheduleRender);
+  document.querySelectorAll('thead th').forEach(function(th){
+    th.addEventListener('click', function(){
+      var k = th.dataset.k;
+      if(state.sortKey === k) state.sortAsc = !state.sortAsc;
+      else { state.sortKey = k; state.sortAsc = true; }
+      document.querySelectorAll('thead th').forEach(function(x){
+        x.classList.remove('sorted');
+        var a = x.querySelector('.arr');
+        if(a) a.textContent = '↑↓';
+      });
+      th.classList.add('sorted');
+      var ar = th.querySelector('.arr');
+      if(ar) ar.textContent = state.sortAsc ? '↑' : '↓';
+      render();
+    });
+  });
+  $('#csv').addEventListener('click', function(){
+    if(!state.rows.length) return;
+    download('ip-batch-' + stamp() + '.csv', '\ufeff' + toCSV(currentRows()), 'text/csv;charset=utf-8');
+  });
+  $('#json').addEventListener('click', function(){
+    if(!state.rows.length) return;
+    download('ip-batch-' + stamp() + '.json', JSON.stringify(currentRows(), null, 2), 'application/json;charset=utf-8');
+  });
+  $('#copy').addEventListener('click', async function(){
+    var rows = currentRows();
+    if(!rows.length) return;
+    var txt = ['IP\t版本\t国家/地区\t省份\t城市\t运营商\t归属地']
+      .concat(rows.map(function(r){ return [r.ip, r.ver, r.country, r.region, r.city, r.isp, r.full].join('\t'); }))
+      .join('\n');
+    try{ await navigator.clipboard.writeText(txt); $('#copy').textContent = '已复制'; setTimeout(function(){ $('#copy').textContent = '复制表格'; }, 1200); }
+    catch(e){ alert('复制失败，请用导出功能'); }
+  });
+  document.addEventListener('keydown', function(e){
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); run(); }
+  });
+
+  render();
+
+  // 便于演示/自检：?demo=1 自动查示例；?ips=1.1.1.1|8.8.8.8 预填并查询；?src=whois 指定数据源
+  try{
+    var qs = new URLSearchParams(location.search);
+    if(qs.get('src')){ $('#source').value = qs.get('src'); }
+    if(qs.get('demo') === '1'){
+      $('#demo').click();
+      setTimeout(run, 50);
+    }
+    var preset = qs.get('ips');
+    if(preset){
+      inputEl.value = preset.replace(/\|/g, '\n');
+      setTimeout(run, 50);
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
