@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IP 批量查询 · 支持 IPv4 / IPv6</title>
+<title>IP / 域名 查询 · IPv4 / IPv6 / WHOIS</title>
 <style>
   :root{
     --bg:#f6f7f9;
@@ -110,6 +110,54 @@
   .empty{padding:34px 10px;text-align:center;color:var(--text-3);font-size:13px}
   .more{padding:9px;text-align:center;color:var(--text-3);font-size:12px;background:#fbfcfd}
 
+  /* ---------- 标签页 ---------- */
+  .tabs{display:flex;gap:6px;margin:18px 0 0;border-bottom:1px solid var(--line)}
+  .tab{
+    border:1px solid transparent;border-bottom:none;background:transparent;color:var(--text-2);
+    font-size:13.5px;font-weight:600;padding:9px 16px;border-radius:9px 9px 0 0;cursor:pointer;
+    position:relative;top:1px;transition:.15s;
+  }
+  .tab:hover{color:var(--text);background:#f0f2f6}
+  .tab.on{background:var(--panel);border-color:var(--line);color:var(--accent);box-shadow:0 -1px 0 var(--panel) inset}
+  .tab-pane{padding-top:2px}
+
+  /* ---------- 域名卡片 ---------- */
+  .dcard{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:12px}
+  .dcard.err{border-color:#f3cfc9;background:#fffbfa}
+  .dc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  .dc-domain{font-family:var(--mono);font-size:15px;font-weight:650;color:var(--text);word-break:break-all}
+  .dc-badges{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  .bdg{font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px;border:1px solid transparent;white-space:nowrap}
+  .bdg.ok{background:var(--ok-soft);color:var(--ok);border-color:#c9ebd9}
+  .bdg.no{background:var(--err-soft);color:var(--err);border-color:#f3cfc9}
+  .bdg.info{background:var(--accent-soft);color:var(--accent);border-color:#cfe0fd}
+  .bdg.warn{background:var(--warn-soft);color:var(--warn);border-color:#f0e0b8}
+  .bdg.gray{background:#f2f4f7;color:var(--text-2);border-color:#e3e6ec}
+
+  .dc-sec{margin-top:11px}
+  .dc-sec-h{font-size:11.5px;font-weight:650;color:var(--text-3);letter-spacing:.4px;margin-bottom:6px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{
+    font-family:var(--mono);font-size:12px;background:#f7f8fa;border:1px solid var(--line);
+    border-radius:6px;padding:2px 8px;color:var(--text);cursor:pointer;transition:.12s;
+  }
+  .chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .chip.static{cursor:default;background:#f7f8fa;color:var(--text-2);border-color:var(--line)}
+  .chip.static:hover{border-color:var(--line);color:var(--text-2);background:#f7f8fa}
+  .chip.v6{background:#faf7ff;border-color:#e7ddfa}
+  .chip.v6:hover{border-color:#9a7ae0;color:#6b3fd4;background:#f4eeff}
+  .cname-flow{font-family:var(--mono);font-size:12px;color:var(--text-2);word-break:break-all;line-height:1.9}
+  .cname-flow b{color:var(--text);font-weight:600}
+
+  .kv{display:grid;grid-template-columns:88px 1fr 88px 1fr;gap:5px 12px;font-size:12.5px}
+  .kv dt{color:var(--text-3)}
+  .kv dd{margin:0;color:var(--text);word-break:break-all}
+  .kv dd.mono{font-family:var(--mono);font-size:12px}
+  .kv dd.urgent{color:var(--err);font-weight:600}
+  .dc-note{margin-top:10px;font-size:12px;color:var(--warn);background:var(--warn-soft);border:1px solid #f0e0b8;border-radius:7px;padding:6px 10px}
+  .dc-foot{margin-top:11px;display:flex;gap:8px;flex-wrap:wrap}
+  .dc-foot button{font-size:12px;padding:4px 11px}
+
   footer{margin-top:26px;font-size:12px;color:var(--text-3);line-height:1.85}
   footer a{color:var(--accent);text-decoration:none}
   footer a:hover{text-decoration:underline}
@@ -135,12 +183,18 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>IP 批量查询</h1>
+    <h1>IP / 域名 查询工具</h1>
     <span class="tag v4">IPv4</span>
     <span class="tag v6">IPv6</span>
     <span class="sub">纯前端 · 并发批量 · 结果可导出</span>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button class="tab on" data-pane="pane-ip">IP 批量查询</button>
+    <button class="tab" data-pane="pane-domain">域名反查 / WHOIS</button>
+  </nav>
+
+  <div class="tab-pane" id="pane-ip">
   <section class="panel">
     <div class="panel-h">
       <h2>① 粘贴 IP 列表</h2>
@@ -240,6 +294,56 @@
       </table>
     </div>
   </section>
+  </div><!-- /pane-ip -->
+
+  <div class="tab-pane" id="pane-domain" hidden>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>① 输入域名</h2>
+        <span class="note">每行一个，也可逗号 / 空格分隔；自动去协议与路径，中文域名转 punycode</span>
+      </div>
+      <textarea id="dInput" spellcheck="false" placeholder="github.com
+baidu.com
+example.org
+cloudflare.com
+taobao.com"></textarea>
+
+      <div class="toolbar">
+        <label class="field">DNS 源
+          <select id="dDoh">
+            <option value="google" selected>Google（8.8.8.8）</option>
+            <option value="ali">阿里 DoH（223.5.5.5）</option>
+            <option value="cf">Cloudflare（1.1.1.1）</option>
+          </select>
+        </label>
+        <label class="field"><input type="checkbox" id="dWhois" checked> 同时查 WHOIS（RDAP）</label>
+        <span class="spacer"></span>
+        <button class="primary" id="dRun">开始查询</button>
+        <button id="dStop" disabled>停止</button>
+        <button class="ghost" id="dDemo">示例</button>
+        <button class="ghost" id="dClear">清空</button>
+      </div>
+
+      <div class="hint">
+        A / AAAA 走 DNS over HTTPS（JSON），WHOIS 走 <b>RDAP</b>（注册局官方 JSON 接口，免费无 key）。
+        <b>.cn 无 RDAP</b>，会提示改用 <a href="https://whois.chinaz.com/" target="_blank" rel="noopener noreferrer">站长之家</a> 查询。
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-h">
+        <h2>② 查询结果</h2>
+        <div class="stats">
+          <span class="stat">域名 <b id="dTotal">0</b></span>
+          <span class="stat ok">已解析 <b id="dResolved">0</b></span>
+          <span class="stat err">无记录 <b id="dFail">0</b></span>
+        </div>
+      </div>
+      <div id="dResults">
+        <div class="empty">还没有结果，输入域名后点「开始查询」</div>
+      </div>
+    </section>
+  </div><!-- /pane-domain -->
 
   <footer>
     <div class="links">
@@ -265,6 +369,7 @@
 
     <p class="disclaimer">
       纯真免费接口官方公告约 100 次/天，大批量请切换到 ipwho.is / ip.sb，或自建离线库（ipv6wry.db + qqwry.dat）本地查询。
+      域名数据来自各注册局的 RDAP 公开接口与 Google / 阿里 / Cloudflare 的 DoH 服务，一并致谢。
     </p>
   </footer>
 </div>
@@ -508,6 +613,130 @@ function netOf(ip, ver){
   return bigIntToIPv6(v6 & 0xffffffffffffffff0000000000000000n) + '/64';
 }
 
+/* ---------- 域名 / RDAP ---------- */
+var RDAP_BASES = {
+  'com': 'https://rdap.verisign.com/com/v1/',
+  'net': 'https://rdap.verisign.com/net/v1/',
+  'org': 'https://rdap.publicinterestregistry.org/rdap/',
+  'io':  'https://rdap.identitydigital.services/rdap/',
+  'me':  'https://rdap.identitydigital.services/rdap/',
+  'dev': 'https://pubapi.registry.google/rdap/',
+  'app': 'https://pubapi.registry.google/rdap/',
+  'top': 'https://rdap.zdnsgtld.com/top/',
+  'xyz': 'https://rdap.centralnic.com/xyz/'
+};
+// 明确没有 RDAP 的后缀
+var RDAP_NONE = ['cn'];
+
+function normDomain(s){
+  var t = String(s == null ? '' : s).trim().toLowerCase();
+  if(!t) return '';
+  t = t.replace(/^[a-z]+:\/\//, '').replace(/^\/\//, '').replace(/[/?#].*$/, '').replace(/:\d+$/, '').replace(/\.$/, '');
+  try{ t = new URL('http://' + t).hostname; }catch(e){ return t; }
+  return t;
+}
+
+function isDomain(s){
+  var t = normDomain(s);
+  if(!t || t.length > 253) return false;
+  if(parseIPv4(t) !== null || isIPv6(t)) return false;
+  var labels = t.split('.');
+  if(labels.length < 2) return false;
+  for(var i=0;i<labels.length;i++){
+    var l = labels[i];
+    if(!l || l.length > 63) return false;
+    if(!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(l)) return false;
+  }
+  return /^[a-z]{2,}$/.test(labels[labels.length-1]);
+}
+
+function parseList_Domain(text){
+  var out = { valid: [], invalid: [] };
+  var seen = Object.create(null);
+  var tokens = String(text).split(/[\s,;，；、]+/);
+  for(var i=0;i<tokens.length;i++){
+    var raw = tokens[i].trim();
+    if(!raw || raw.charAt(0) === '#') continue;
+    if(!isDomain(raw)){ out.invalid.push({ raw: raw, reason: '不是合法域名' }); continue; }
+    var d = normDomain(raw);
+    if(seen[d]) continue;
+    seen[d] = 1;
+    out.valid.push(d);
+  }
+  return out;
+}
+
+function rdapBaseFor(domain){
+  var tld = String(domain).split('.').pop().toLowerCase();
+  if(RDAP_NONE.indexOf(tld) >= 0) return null;
+  return RDAP_BASES[tld] || 'https://rdap.org/';
+}
+
+function parseVCard(entity){
+  var out = {};
+  var v = entity && entity.vcardArray;
+  if(!v || !v[1] || !v[1].length) return out;
+  for(var i=0;i<v[1].length;i++){
+    var item = v[1][i];
+    if(!item || !item[0]) continue;
+    if(typeof item[3] === 'string') out[item[0]] = item[3];
+    else if(Array.isArray(item[3]) && typeof item[3][0] === 'string') out[item[0]] = item[3][0];
+  }
+  return out;
+}
+
+function normalizeRdap(j){
+  if(!j) throw new Error('RDAP 无返回');
+  if(j.errorCode) throw new Error(j.title || 'RDAP 无数据');
+  var ev = {};
+  (j.events || []).forEach(function(e){
+    if(e && e.eventAction) ev[e.eventAction] = String(e.eventDate || '').slice(0, 10);
+  });
+  var registrar = '', registrant = '', abuse = '';
+  (j.entities || []).forEach(function(en){
+    var roles = en && en.roles || [];
+    var vc = parseVCard(en);
+    if(roles.indexOf('registrar') >= 0 && !registrar) registrar = vc.fn || '';
+    if(roles.indexOf('registrant') >= 0 && !registrant) registrant = vc.fn || '';
+    (en && en.entities || []).forEach(function(sub){
+      var sr = sub && sub.roles || [];
+      var sv = parseVCard(sub);
+      if(sr.indexOf('abuse') >= 0 && !abuse) abuse = sv.fn || sv.email || '';
+    });
+  });
+  return {
+    domain: String(j.ldhName || '').toLowerCase(),
+    registrar: registrar,
+    registrant: registrant,
+    abuse: abuse,
+    created: ev['registration'] || '',
+    expires: ev['expiration'] || '',
+    updated: ev['last changed'] || '',
+    status: (j.status || []).join(', '),
+    ns: (j.nameservers || []).map(function(n){ return String(n && n.ldhName || '').toLowerCase(); }).filter(Boolean)
+  };
+}
+
+function normalizeDoh(j){
+  var ans = (j && j.Answer) || [];
+  var out = { a: [], aaaa: [], cname: [], status: (j && typeof j.Status === 'number') ? j.Status : null };
+  for(var i=0;i<ans.length;i++){
+    var r = ans[i];
+    if(r.type === 1) out.a.push(String(r.data));
+    else if(r.type === 28) out.aaaa.push(String(r.data));
+    else if(r.type === 5) out.cname.push(String(r.data).replace(/\.$/, ''));
+  }
+  return out;
+}
+
+function daysLeft(dateStr, now){
+  if(!dateStr) return null;
+  var t = Date.parse(dateStr + 'T00:00:00Z');
+  if(isNaN(t)) return null;
+  var base = (typeof now === 'number') ? now : Date.now();
+  return Math.ceil((t - base) / 86400000);
+}
+
 function toCSV(rows){
   var head = ['序号','IP','版本','国家/地区','省份','城市','运营商/单位','归属地全文','数据源','状态'];
   var lines = [head.join(',')];
@@ -554,12 +783,14 @@ function toCSV(rows){
   }
 
   /* ---------- 网络 ---------- */
-  function fetchWithTimeout(url, ms){
+  function fetchWithTimeout(url, ms, opts){
     var ctl = new AbortController();
     var timer = setTimeout(function(){ ctl.abort(); }, ms || 12000);
-    return fetch(url, { signal: ctl.signal, cache: 'no-store' })
+    var o = Object.assign({ cache: 'no-store' }, opts || {});
+    o.signal = ctl.signal;
+    return fetch(url, o)
       .then(function(r){
-        if(!r.ok) throw new Error('HTTP ' + r.status);
+        if(!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
         return r;
       })
       .finally(function(){ clearTimeout(timer); });
@@ -809,7 +1040,230 @@ function toCSV(rows){
     return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
   }
 
+  /* ---------- 域名查询 ---------- */
+  var dState = { running: false, stop: false, rows: [] };
+
+  function switchTab(pane){
+    document.querySelectorAll('.tab').forEach(function(b){
+      b.classList.toggle('on', b.dataset.pane === pane);
+    });
+    document.querySelectorAll('.tab-pane').forEach(function(p){
+      p.hidden = (p.id !== pane);
+    });
+    if(pane === 'pane-domain'){
+      try{ history.replaceState(null, '', '#domain'); }catch(e){}
+    }else{
+      try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+    }
+  }
+
+  function dohUrl(name, type, provider){
+    var q = '?name=' + encodeURIComponent(name) + '&type=' + type;
+    if(provider === 'ali') return 'https://dns.alidns.com/resolve' + q;
+    if(provider === 'cf') return 'https://cloudflare-dns.com/dns-query' + q;
+    return 'https://dns.google/resolve' + q;
+  }
+
+  function qDoh(name, type, provider){
+    var opts = provider === 'cf' ? { headers: { Accept: 'application/dns-json' } } : null;
+    return fetchWithTimeout(dohUrl(name, type, provider), 12000, opts)
+      .then(function(r){ return r.json(); })
+      .then(normalizeDoh);
+  }
+
+  function qRdap(domain){
+    var base = rdapBaseFor(domain);
+    if(!base) return Promise.reject(new Error('RDAP_UNSUPPORTED'));
+    return fetchWithTimeout(base + 'domain/' + encodeURIComponent(domain), 15000, { headers: { Accept: 'application/rdap+json' } })
+      .then(function(r){ return r.json(); })
+      .then(normalizeRdap);
+  }
+
+  function dcardHtml(r, i){
+    var hasIp = r.a.length + r.aaaa.length > 0;
+    var badges = '';
+    if(r.status === 'wait'){
+      badges = '<span class="bdg gray">查询中…</span>';
+    }else{
+      if(hasIp) badges += '<span class="bdg ok">已解析</span>';
+      else if(r.dnsStatus === 3) badges += '<span class="bdg no">NXDOMAIN</span>';
+      else if(r.dnsErr) badges += '<span class="bdg no">DNS 失败</span>';
+      else badges += '<span class="bdg gray">无 A/AAAA</span>';
+
+      if(r.whois) badges += '<span class="bdg info">已注册</span>';
+      else if(r.whoisErr === 'RDAP_UNSUPPORTED') badges += '<span class="bdg warn">该后缀无 RDAP</span>';
+      else if(r.whoisErr) badges += '<span class="bdg no">未注册 / 无记录</span>';
+    }
+
+    var html = '<div class="dcard' + (r.status === 'fail' ? ' err' : '') + '">'
+      + '<div class="dc-head"><span class="dc-domain">' + esc(r.domain) + '</span>'
+      + '<span class="dc-badges">' + badges + '</span></div>';
+
+    if(r.a.length){
+      html += '<div class="dc-sec"><div class="dc-sec-h">A 记录 · IPv4</div><div class="chips">'
+        + r.a.map(function(ip){ return '<span class="chip" data-ip="' + esc(ip) + '" title="点击查归属地">' + esc(ip) + '</span>'; }).join('')
+        + '</div></div>';
+    }
+    if(r.aaaa.length){
+      html += '<div class="dc-sec"><div class="dc-sec-h">AAAA 记录 · IPv6</div><div class="chips">'
+        + r.aaaa.map(function(ip){ return '<span class="chip v6" data-ip="' + esc(ip) + '" title="点击查归属地">' + esc(ip) + '</span>'; }).join('')
+        + '</div></div>';
+    }
+    if(r.cname.length){
+      html += '<div class="dc-sec"><div class="dc-sec-h">CNAME 链</div><div class="cname-flow">'
+        + '<b>' + esc(r.domain) + '</b> → ' + r.cname.map(function(c){ return '<b>' + esc(c) + '</b>'; }).join(' → ')
+        + '</div></div>';
+    }
+
+    if(r.whois){
+      var w = r.whois;
+      var dl = daysLeft(w.expires);
+      var expTxt = w.expires || '—';
+      if(dl !== null){
+        expTxt += '（' + (dl >= 0 ? '剩 ' + dl + ' 天' : '已过期 ' + Math.abs(dl) + ' 天') + '）';
+      }
+      html += '<div class="dc-sec"><div class="dc-sec-h">WHOIS · RDAP</div><dl class="kv">'
+        + '<dt>注册商</dt><dd>' + esc(w.registrar || '—') + '</dd>'
+        + '<dt>注册时间</dt><dd class="mono">' + esc(w.created || '—') + '</dd>'
+        + '<dt>到期时间</dt><dd class="mono' + (dl !== null && dl < 30 ? ' urgent' : '') + '">' + esc(expTxt) + '</dd>'
+        + '<dt>更新时间</dt><dd class="mono">' + esc(w.updated || '—') + '</dd>'
+        + (w.registrant ? '<dt>注册人</dt><dd>' + esc(w.registrant) + '</dd>' : '')
+        + (w.abuse ? '<dt>滥用举报</dt><dd>' + esc(w.abuse) + '</dd>' : '')
+        + '<dt>域名状态</dt><dd style="grid-column:2 / -1">' + esc(w.status || '—') + '</dd>'
+        + '<dt style="grid-column:1">NS</dt><dd style="grid-column:2 / -1"><div class="chips">'
+        + (w.ns.length ? w.ns.map(function(n){ return '<span class="chip static">' + esc(n) + '</span>'; }).join('') : '—')
+        + '</div></dd>'
+        + '</dl></div>';
+    }else if(r.whoisErr){
+      var noteHtml;
+      if(r.whoisErr === 'RDAP_UNSUPPORTED'){
+        noteHtml = '该后缀（如 .cn）注册局未提供 RDAP 接口，纯前端无法查询。可前往 '
+          + '<a href="https://whois.chinaz.com/' + encodeURIComponent(r.domain) + '" target="_blank" rel="noopener noreferrer">站长之家查 ' + esc(r.domain) + '</a>。';
+      }else{
+        noteHtml = 'RDAP 未返回该域名记录（可能未注册，或注册局限制了查询）。';
+      }
+      html += '<div class="dc-note">' + noteHtml + '</div>';
+    }
+
+    if(hasIp){
+      html += '<div class="dc-foot"><button data-act="toip" data-i="' + i + '">把这 ' + (r.a.length + r.aaaa.length) + ' 个 IP 拿去查归属地 →</button></div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderDomain(){
+    var el = $('#dResults');
+    if(!dState.rows.length){
+      el.innerHTML = '<div class="empty">还没有结果，输入域名后点「开始查询」</div>';
+    }else{
+      el.innerHTML = dState.rows.map(dcardHtml).join('');
+    }
+    var ok = 0, bad = 0;
+    dState.rows.forEach(function(r){
+      if(r.a.length + r.aaaa.length) ok++;
+      else if(r.status !== 'wait') bad++;
+    });
+    $('#dTotal').textContent = dState.rows.length;
+    $('#dResolved').textContent = ok;
+    $('#dFail').textContent = bad;
+  }
+
+  async function runDomain(){
+    if(dState.running) return;
+    var parsed = parseList_Domain($('#dInput').value);
+    dState.rows = parsed.valid.map(function(d){
+      return { domain: d, status: 'wait', a: [], aaaa: [], cname: [], dnsStatus: null, dnsErr: '', whois: null, whoisErr: '' };
+    });
+    parsed.invalid.forEach(function(b){
+      dState.rows.push({ domain: b.raw, status: 'fail', a: [], aaaa: [], cname: [], dnsStatus: null, dnsErr: b.reason, whois: null, whoisErr: '' });
+    });
+    if(!dState.rows.length) return;
+
+    dState.running = true; dState.stop = false;
+    $('#dRun').disabled = true; $('#dStop').disabled = false;
+    renderDomain();
+
+    var provider = $('#dDoh').value;
+    var doWhois = $('#dWhois').checked;
+    var queue = dState.rows.filter(function(r){ return r.status === 'wait'; });
+    var cursor = 0;
+    var CONC = 4;
+
+    async function worker(){
+      while(true){
+        if(dState.stop) return;
+        var idx = cursor++;
+        if(idx >= queue.length) return;
+        var row = queue[idx];
+        try{
+          var res = await Promise.all([
+            qDoh(row.domain, 'A', provider).catch(function(e){ row.dnsErr = e.message; return null; }),
+            qDoh(row.domain, 'AAAA', provider).catch(function(){ return null; })
+          ]);
+          var a = res[0], b = res[1];
+          row.a = a ? a.a : [];
+          row.cname = a ? a.cname : [];
+          row.aaaa = b ? b.aaaa : [];
+          row.dnsStatus = a ? a.status : null;
+          if(row.a.length && !row.cname.length) row.cname = [];
+        }catch(e){
+          row.dnsErr = String(e && e.message || e);
+        }
+
+        if(doWhois){
+          try{
+            row.whois = await qRdap(row.domain);
+          }catch(e){
+            row.whoisErr = (e && e.message === 'RDAP_UNSUPPORTED') ? 'RDAP_UNSUPPORTED' : String(e && e.message || e);
+          }
+        }
+        row.status = (row.a.length + row.aaaa.length || row.whois) ? 'ok' : 'fail';
+        if(!row.a.length && !row.aaaa.length && !row.whois && !row.dnsErr && !row.whoisErr) row.status = 'fail';
+        renderDomain();
+      }
+    }
+
+    var n = Math.min(CONC, queue.length), tasks = [];
+    for(var i=0;i<n;i++) tasks.push(worker());
+    await Promise.all(tasks);
+
+    dState.running = false;
+    $('#dRun').disabled = false; $('#dStop').disabled = true;
+    renderDomain();
+  }
+
+  function gotoIp(ips){
+    if(!ips.length) return;
+    inputEl.value = ips.join('\n');
+    switchTab('pane-ip');
+    setTimeout(run, 60);
+  }
+
   /* ---------- 事件 ---------- */
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.addEventListener('click', function(){ switchTab(b.dataset.pane); });
+  });
+  $('#dRun').addEventListener('click', runDomain);
+  $('#dStop').addEventListener('click', function(){ dState.stop = true; });
+  $('#dClear').addEventListener('click', function(){
+    $('#dInput').value = ''; dState.rows = []; renderDomain();
+  });
+  $('#dDemo').addEventListener('click', function(){
+    $('#dInput').value = ['github.com','baidu.com','example.org','cloudflare.com','taobao.com','qq.com','npmjs.com','workers.dev'].join('\n');
+  });
+  $('#dResults').addEventListener('click', function(e){
+    var chip = e.target.closest('.chip[data-ip]');
+    if(chip){ gotoIp([chip.dataset.ip]); return; }
+    var btn = e.target.closest('button[data-act="toip"]');
+    if(btn){
+      var r = dState.rows[parseInt(btn.dataset.i, 10)];
+      if(r) gotoIp(r.a.concat(r.aaaa));
+    }
+  });
+  $('#dInput').addEventListener('keydown', function(e){
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); runDomain(); }
+  });
   $('#run').addEventListener('click', run);
   $('#stop').addEventListener('click', function(){ state.stop = true; });
   $('#clear').addEventListener('click', function(){
@@ -889,11 +1343,22 @@ function toCSV(rows){
   });
 
   render();
+  renderDomain();
 
   // 便于演示/自检：?demo=1 自动查示例；?ips=1.1.1.1|8.8.8.8 预填并查询；?src=whois 指定数据源
+  // ?d=github.com|baidu.com 直接查域名；#domain 打开域名页
   try{
     var qs = new URLSearchParams(location.search);
     if(qs.get('src')){ $('#source').value = qs.get('src'); }
+    var presetD = qs.get('d');
+    if(presetD){
+      switchTab('pane-domain');
+      $('#dInput').value = presetD.replace(/\|/g, '\n');
+      if(qs.get('nowhois') === '1') $('#dWhois').checked = false;
+      setTimeout(runDomain, 50);
+    }else if(location.hash === '#domain'){
+      switchTab('pane-domain');
+    }
     if(qs.get('demo') === '1'){
       $('#demo').click();
       setTimeout(run, 50);

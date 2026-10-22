@@ -4,7 +4,7 @@ const html = fs.readFileSync(path, 'utf8');
 const m = html.match(/\/\* ==================== CORE START[\s\S]*?\*\/([\s\S]*?)\/\* ==================== CORE END/);
 if (!m) { console.error('CORE 区块未找到'); process.exit(1); }
 const code = m[1];
-const api = new Function(code + '\nreturn {stripPort,parseIPv4,isIPv6,normIPv6,ipv6ToBigInt,bigIntToIPv6,parseList,expandCidr,normalizeZxinc,normalizeWhois,normalizeIpsb,normalizeIpinfo,netOf,toCSV};')();
+const api = new Function(code + '\nreturn {stripPort,parseIPv4,isIPv6,normIPv6,ipv6ToBigInt,bigIntToIPv6,parseList,expandCidr,normalizeZxinc,normalizeWhois,normalizeIpsb,normalizeIpinfo,netOf,toCSV,normDomain,isDomain,parseList_Domain,rdapBaseFor,parseVCard,normalizeRdap,normalizeDoh,daysLeft};')();
 
 let pass = 0, fail = 0;
 function eq(name, got, want) {
@@ -113,6 +113,92 @@ try { api.normalizeWhois({success:false,message:'reserved range'}); fail++; cons
 const csv = api.toCSV([{ip:'1.1.1.1',ver:'IPv4',country:'美国',region:'',city:'',isp:'a,b',full:'说"引号"',source:'纯真',status:'ok'}]);
 ok('csv header', csv.split('\r\n')[0].startsWith('序号,IP,版本'));
 ok('csv escape', csv.indexOf('"a,b"') > -1 && csv.indexOf('"说""引号"""') > -1, csv);
+
+/* ==================== 域名 / RDAP ==================== */
+
+// ---- normDomain ----
+eq('域名 去协议路径', api.normDomain('https://GitHub.com/foo/bar?x=1#y'), 'github.com');
+eq('域名 去端口', api.normDomain('github.com:443'), 'github.com');
+eq('域名 去末尾点', api.normDomain('github.com.'), 'github.com');
+eq('域名 大写', api.normDomain('GITHUB.COM'), 'github.com');
+eq('中文域名转 punycode', api.normDomain('中文.com'), 'xn--fiq228c.com');
+
+// ---- isDomain ----
+ok('合法域名', api.isDomain('github.com'));
+ok('子域名', api.isDomain('api.github.com'));
+ok('连字符域名', api.isDomain('my-site.co'));
+ok('拒绝纯 IP', !api.isDomain('1.1.1.1'));
+ok('拒绝 IPv6', !api.isDomain('2408:8000::1'));
+ok('拒绝单段', !api.isDomain('localhost'));
+ok('拒绝单字母 TLD', !api.isDomain('a.b'));
+ok('拒绝非法字符', !api.isDomain('bad_domain.com'));
+ok('拒绝空', !api.isDomain(''));
+ok('接受中文域名', api.isDomain('中文.com'));
+
+// ---- parseList_Domain ----
+let dl = api.parseList_Domain('GitHub.com\nhttps://baidu.com/x\n, example.org ;github.com\n#注释\n1.1.1.1\nbad_domain');
+eq('域名列表 有效数', dl.valid, ['github.com','baidu.com','example.org']);
+eq('域名列表 无效项', dl.invalid.map(x=>x.raw), ['1.1.1.1','bad_domain']);
+
+// ---- rdapBaseFor ----
+eq('rdap .com', api.rdapBaseFor('github.com'), 'https://rdap.verisign.com/com/v1/');
+eq('rdap .org', api.rdapBaseFor('example.org'), 'https://rdap.publicinterestregistry.org/rdap/');
+eq('rdap .cn 无', api.rdapBaseFor('baidu.cn'), null);
+eq('rdap 未知后缀走 rdap.org', api.rdapBaseFor('foo.zzz'), 'https://rdap.org/');
+
+// ---- parseVCard ----
+const vc = api.parseVCard({vcardArray:['vcard',[['version',{},'text','4.0'],['fn',{},'text','MarkMonitor Inc.'],['email',{},'text','abuse@x.com']]]});
+eq('vcard fn', vc.fn, 'MarkMonitor Inc.');
+eq('vcard email', vc.email, 'abuse@x.com');
+eq('vcard 空', api.parseVCard(null), {});
+
+// ---- normalizeRdap（贴近真实结构）----
+const rdapRaw = {
+  objectClassName:'domain', ldhName:'GITHUB.COM',
+  status:['client delete prohibited','client transfer prohibited'],
+  events:[{eventAction:'registration',eventDate:'2007-10-09T18:20:50Z'},
+          {eventAction:'expiration',eventDate:'2028-10-09T18:20:50Z'},
+          {eventAction:'last changed',eventDate:'2026-09-07T09:12:31Z'},
+          {eventAction:'last update of RDAP database',eventDate:'2026-10-22T00:00:00Z'}],
+  entities:[{roles:['registrar'], vcardArray:['vcard',[['fn',{},'text','MarkMonitor Inc.']]],
+             entities:[{roles:['abuse'], vcardArray:['vcard',[['fn',{},'text','Abuse Desk']]]}]},
+            {roles:['registrant'], vcardArray:['vcard',[['fn',{},'text','GitHub, Inc.']]]}],
+  nameservers:[{ldhName:'DNS1.P08.NSONE.NET'},{ldhName:'DNS2.P08.NSONE.NET'}]
+};
+const wr = api.normalizeRdap(rdapRaw);
+eq('rdap 域名', wr.domain, 'github.com');
+eq('rdap 注册商', wr.registrar, 'MarkMonitor Inc.');
+eq('rdap 注册人', wr.registrant, 'GitHub, Inc.');
+eq('rdap 滥用举报', wr.abuse, 'Abuse Desk');
+eq('rdap 注册时间', wr.created, '2007-10-09');
+eq('rdap 到期时间', wr.expires, '2028-10-09');
+eq('rdap 更新时间（不取库更新时间）', wr.updated, '2026-09-07');
+eq('rdap NS', wr.ns, ['dns1.p08.nsone.net','dns2.p08.nsone.net']);
+eq('rdap status', wr.status, 'client delete prohibited, client transfer prohibited');
+
+try { api.normalizeRdap({errorCode:404,title:'No RDAP service is available for this resource'}); fail++; console.log('FAIL rdap 404 未抛错'); } catch(e){ ok('rdap 404 抛错', e.message.indexOf('No RDAP') >= 0); }
+try { api.normalizeRdap(null); fail++; console.log('FAIL rdap null 未抛错'); } catch(e){ pass++; }
+
+// ---- normalizeDoh ----
+const doh = api.normalizeDoh({Status:0, Answer:[
+  {name:'github.com.', type:5, TTL:60, data:'github.com.cdn.cloudflare.net.'},
+  {name:'github.com.', type:1, TTL:60, data:'20.205.243.166'},
+  {name:'github.com.', type:1, TTL:60, data:'20.27.177.113'},
+  {name:'github.com.', type:28, TTL:60, data:'2606:50c0:8000::154'}
+]});
+eq('doh A', doh.a, ['20.205.243.166','20.27.177.113']);
+eq('doh AAAA', doh.aaaa, ['2606:50c0:8000::154']);
+eq('doh CNAME 去尾点', doh.cname, ['github.com.cdn.cloudflare.net']);
+eq('doh status', doh.status, 0);
+eq('doh NXDOMAIN', api.normalizeDoh({Status:3}).status, 3);
+eq('doh 空', api.normalizeDoh(null).a, []);
+
+// ---- daysLeft ----
+const NOW = Date.parse('2026-10-22T00:00:00Z');
+eq('剩余天数', api.daysLeft('2028-10-09', NOW), 718);
+eq('已过期', api.daysLeft('2020-01-01', NOW) < 0, true);
+eq('空日期', api.daysLeft('', NOW), null);
+eq('非法日期', api.daysLeft('not-a-date', NOW), null);
 
 console.log(`\n通过 ${pass} / ${pass+fail}`);
 process.exit(fail ? 1 : 0);
